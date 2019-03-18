@@ -1,23 +1,65 @@
-#![allow(warnings)]
+//! B-C-P! The Rust compile-time / run-time performance analyzer.
+//!
+//! ## TODO
+//!
+//! - better project name
+//! - better name than 'state'
+//! - better error reporting
+//! - logging
+
+#![allow(warnings)] // TODO tmp
 
 #[macro_use]
 extern crate structopt;
 #[macro_use]
 extern crate serde_derive;
 
-use failure::Error;
+use failure::{ResultExt, Error};
 use std::path::{PathBuf, Path};
 use std::result::Result as StdResult;
 use std::time::Duration;
+use std::fs;
+use std::io;
 use structopt::StructOpt;
 
+// A shorthand for all the `Result` types returned in this crate
 type Result<T> = StdResult<T, Error>;
 
-struct StaticConfigItem {
-    path: &'static str,
-    env_var: &'static str,
-    values: &'static [&'static str],
-    default: &'static str,
+/// Options to the CLI
+#[derive(StructOpt)]
+struct Options {
+    /// The path to the Cargo.toml file to explore
+    #[structopt(long = "manifest-path", default_value = "Cargo.toml")]
+    manifest_path: PathBuf,
+    /// The directory in which we store the experiment data and HTML report
+    #[structopt(long = "data-dir", default_value = "./", parse(from_os_str))]
+    data_dir: PathBuf,
+}
+
+impl Options {
+    /// The path to the experiment snapshot
+    fn state_path(&self) -> PathBuf {
+        self.data_dir.join("bcp-state.json")
+    }
+
+    /// The path to the HTML report
+    fn report_path(&self) -> PathBuf {
+        self.data_dir.join("bcp-report.html")
+    }
+}
+
+fn main() -> Result<()> {
+    let opts = Options::from_args();
+
+    let mut state = load_state(&opts.state_path())?;
+
+    run_experiments(&opts, &mut state)?;
+
+    let report = gen_report(&opts, &mut state)?;
+
+    render_html(&report)?;
+
+    Ok(())
 }
 
 static CONFIG_ITEMS: &[StaticConfigItem] = &[
@@ -77,6 +119,14 @@ static CONFIG_ITEMS: &[StaticConfigItem] = &[
     },
 ];
 
+struct StaticConfigItem {
+    path: &'static str,
+    env_var: &'static str,
+    values: &'static [&'static str],
+    default: &'static str,
+}
+
+
 #[derive(Serialize, Deserialize)]
 struct ConfigItem {
     path: String,
@@ -96,45 +146,39 @@ impl<'a> From<&'a StaticConfigItem> for ConfigItem {
     }
 }
 
-#[derive(StructOpt)]
-struct Options {
-    #[structopt(long = "manifest-path", default_value = "Cargo.toml")]
-    manifest_path: PathBuf,
-    #[structopt(long = "data-dir", default_value = "./", parse(from_os_str))]
-    data_dir: PathBuf,
-}
-
-impl Options {
-    fn state_path(&self) -> PathBuf {
-        self.data_dir.join("bcp-state.json")
-    }
-
-    fn report_path(&self) -> PathBuf {
-        self.data_dir.join("bcp-report.html")
-    }
-}
-
-fn main() -> Result<()> {
-    let opts = Options::from_args();
-
-    let mut state = load_state(&opts.state_path())?;
-
-    run_experiments(&opts, &mut state)?;
-
-    report(&state)?;
-    
-    Ok(())
-}
-
 #[derive(Serialize, Deserialize)]
 struct State {
-    plan: Vec<Experiment>,
+    plan: Plan,
     results: Vec<ExpResult>,
 }
 
 #[derive(Serialize, Deserialize)]
+struct Plan {
+    baseline: Vec<DefinedItem>,
+    cases: Vec<Experiment>,
+}
+
+#[derive(Serialize, Deserialize)]
 struct Experiment {
-    configs: Vec<(ConfigItem, String)>,
+    configs: Vec<DefinedItem>,
+}
+
+type DefinedItem = (ConfigItem, String);
+
+impl Experiment {
+    fn display(&self) -> String {
+        if self.configs.is_empty() {
+            return "(empty)".to_string();
+        }
+        
+        let mut buf = String::new();
+
+        for &(ref cfg, ref val) in &self.configs {
+            buf.push_str(&format!("{}={},", cfg.path, val));
+        }
+
+        buf   
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -143,14 +187,112 @@ struct ExpResult {
     run_time: Duration,
 }
 
+struct Report { }
+
 fn load_state(path: &Path) -> Result<State> {
-    panic!()
+    let state_str = fs::read_to_string(path);
+
+    match state_str {
+        Err(ref e) if e.kind() == io::ErrorKind::NotFound => {
+            println!("beginning fresh run");
+            Ok(new_state())
+        }
+        Ok(s) => {
+            println!("resuming from state file {}", path.display());
+            parse_state(&s)
+        },
+        Err(e) => {
+            Err(e)
+                .context("error loading from state file")
+                .map_err(Error::from)
+        }
+    }
+}
+
+fn save_state(path: &Path, state: &State) -> Result<()> {
+    let s = serde_json::to_string_pretty(state)?;
+
+    let ext = path.extension().expect("state path has no extension");
+    let tmp_ext = format!("{:?}.{}", ext, ".tmp");
+    let tmp_path = path.with_extension(&tmp_ext);
+
+    println!("tmp_path: {}", tmp_path.display());
+
+    fs::write(&tmp_path, s)
+        .context("failed to write state to disk")?;
+
+    fs::rename(&tmp_path, path)
+        .context("failed to overwrite previous state")?;
+
+    Ok(())
+}
+
+fn new_state() -> State {
+    State {
+        plan: make_plan(),
+        results: vec![],
+    }
+}
+
+fn make_plan() -> Plan {
+
+    let mut cases = vec![];
+    let mut baseline = vec![];
+
+    for c in CONFIG_ITEMS {
+
+        baseline.push((c.into(), c.default.into()));
+
+        let ignore_case = c.values.is_empty();
+        if ignore_case { continue }
+
+        for vals in c.values {
+            cases.push(Experiment {
+                configs: vec![(c.into(), (*vals).into())],
+            });
+        }
+    }
+
+    Plan {
+        baseline,
+        cases,
+    }
+}
+
+fn parse_state(s: &str) -> Result<State> {
+    Ok(serde_json::from_str(s)?)
 }
 
 fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
+
+    let baseline = &state.plan.baseline;
+    for (idx, case) in state.plan.cases.iter().enumerate() {
+
+        assert!(state.plan.cases.len() >= state.results.len());
+
+        let previously_run = state.results.len() >= idx + 1;
+
+        if !previously_run {
+            println!("running experiment {}: {}", idx, case.display());
+            state.results.push(run_experiment(baseline, case)?);
+            save_state(&opts.state_path(), state);
+        } else {
+            println!("skipping previously-run experiment {}, {}", idx, case.display());
+        }
+    }
+
+    Ok(())
+}
+
+fn run_experiment(baseline: &[DefinedItem], case: &Experiment) -> Result<ExpResult> {
+    panic!()    
+}
+
+fn gen_report(opts: &Options, state: &State) -> Result<Report> {
     panic!()
 }
 
-fn report(state: &State) -> Result<()> {
+fn render_html(report: &Report) -> Result<()> {
     panic!()
 }
+
