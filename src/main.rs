@@ -4,6 +4,7 @@
 //!
 //! - better project name
 //! - better name than 'state'
+//! - better name than 'item' (cfg?)
 //! - better error reporting
 //! - logging
 
@@ -20,6 +21,7 @@ use std::result::Result as StdResult;
 use std::time::Duration;
 use std::fs;
 use std::io;
+use std::process::Command;
 use structopt::StructOpt;
 
 // A shorthand for all the `Result` types returned in this crate
@@ -127,7 +129,7 @@ struct StaticConfigItem {
 }
 
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct ConfigItem {
     path: String,
     env_var: String,
@@ -146,6 +148,8 @@ impl<'a> From<&'a StaticConfigItem> for ConfigItem {
     }
 }
 
+type DefinedItem = (ConfigItem, String);
+
 #[derive(Serialize, Deserialize)]
 struct State {
     plan: Plan,
@@ -162,8 +166,6 @@ struct Plan {
 struct Experiment {
     configs: Vec<DefinedItem>,
 }
-
-type DefinedItem = (ConfigItem, String);
 
 impl Experiment {
     fn display(&self) -> String {
@@ -285,7 +287,37 @@ fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
 }
 
 fn run_experiment(baseline: &[DefinedItem], case: &Experiment) -> Result<ExpResult> {
-    panic!()    
+    let items = merge_items(baseline, &case.configs);
+    let envs = items_to_envs(&items);
+
+    let cmd_res = run_cargo(envs.clone(), &["clean"]);
+
+    panic!()
+}
+
+fn run_cargo<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Result<()> {
+    let clean_cmd = cargo_command(envs.clone(), &["clean"]);
+
+    run_command(clean_cmd)
+}
+
+fn cargo_command<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Command {
+    let mut cmd = Command::new("cargo");
+    cmd.envs(envs);
+    cmd.args(args);
+    cmd
+}
+
+fn run_command(cmd: Command) -> Result<()> {
+    panic!()
+}
+
+fn merge_items(i1: &[DefinedItem], i2: &[DefinedItem]) -> Vec<DefinedItem> {
+    panic!()
+}
+
+fn items_to_envs(items: &[DefinedItem]) -> Vec<(String, String)> {
+    panic!()
 }
 
 fn gen_report(opts: &Options, state: &State) -> Result<Report> {
