@@ -59,6 +59,7 @@ fn main() -> Result<()> {
 
     let report = gen_report(&opts, &mut state)?;
 
+    log_report(&report)?;
     render_html(&report)?;
 
     Ok(())
@@ -75,7 +76,7 @@ static CONFIG_ITEMS: &[StaticConfigItem] = &[
         path: "profile.release.debug",
         env_var: "CARGO_PROFILE_RELEASE_DEBUG",
         values: &["false", "1", "true"],
-        default: "true",
+        default: "false",
     },
     StaticConfigItem {
         path: "profile.release.rpath",
@@ -93,7 +94,7 @@ static CONFIG_ITEMS: &[StaticConfigItem] = &[
         path: "profile.release.debug-assertions",
         env_var: "CARGO_PROFILE_RELEASE_DEBUG_ASSERTIONS",
         values: &["false", "true"],
-        default: "true",
+        default: "false",
     },
     StaticConfigItem {
         path: "profile.release.codegen-units",
@@ -117,7 +118,7 @@ static CONFIG_ITEMS: &[StaticConfigItem] = &[
         path: "profile.release.overflow-checks",
         env_var: "CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS",
         values: &["false", "true"],
-        default: "true",
+        default: "false",
     },
 ];
 
@@ -162,9 +163,27 @@ struct Plan {
     cases: Vec<Experiment>,
 }
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug)]
 struct Experiment {
     configs: Vec<DefinedItem>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct ExpResult {
+    build_time: Duration,
+    run_time: Duration,
+}
+
+type ExpAndResult = (Experiment, ExpResult);
+
+struct Report {
+    results_by_total_time: Vec<ExpAndResult>,
+}
+
+impl State {
+    fn validate(&self) {
+        assert!(self.plan.cases.len() >= self.results.len());
+    }
 }
 
 impl Experiment {
@@ -182,14 +201,6 @@ impl Experiment {
         buf   
     }
 }
-
-#[derive(Serialize, Deserialize)]
-struct ExpResult {
-    build_time: Duration,
-    run_time: Duration,
-}
-
-struct Report { }
 
 fn load_state(path: &Path) -> Result<State> {
     let state_str = fs::read_to_string(path);
@@ -215,7 +226,7 @@ fn save_state(path: &Path, state: &State) -> Result<()> {
     let s = serde_json::to_string_pretty(state)?;
 
     let ext = path.extension().expect("state path has no extension");
-    let tmp_ext = format!("{:?}.{}", ext, ".tmp");
+    let tmp_ext = format!("{:?}.{}", ext.display(), "tmp");
     let tmp_path = path.with_extension(&tmp_ext);
 
     println!("tmp_path: {}", tmp_path.display());
@@ -283,6 +294,8 @@ fn parse_state(s: &str) -> Result<State> {
 
 fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
 
+    state.validate();
+
     for (idx, case) in state.plan.cases.iter().enumerate() {
         println!("case {}: {}", idx, case.display());
     }
@@ -290,13 +303,12 @@ fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
     let baseline = &state.plan.baseline;
     for (idx, case) in state.plan.cases.iter().enumerate() {
 
-        assert!(state.plan.cases.len() >= state.results.len());
-
         let previously_run = state.results.len() >= idx + 1;
 
         if !previously_run {
             println!("running experiment {}: {}", idx, case.display());
             state.results.push(run_experiment(opts, baseline, case)?);
+            state.validate();
             save_state(&opts.state_path(), state);
         } else {
             println!("skipping previously-run experiment {}, {}", idx, case.display());
@@ -416,10 +428,50 @@ fn time(f: &Fn() -> Result<()>) -> Result<Duration> {
 }
 
 fn gen_report(opts: &Options, state: &State) -> Result<Report> {
-    panic!()
+
+    state.validate();
+
+    assert!(state.results.len() == state.plan.cases.len());
+
+    let mut results =
+        state.plan.cases.iter().cloned()
+        .zip(state.results.iter().cloned())
+        .collect::<Vec<_>>();
+
+    //let (baseline, results) = split_results(results, &state.plan.baseline);
+
+    results.sort_by_key(|x| x.1.build_time + x.1.run_time);
+
+    Ok(Report {
+        results_by_total_time: results
+    })
+}
+
+/*fn split_results(mut res: Vec<ExpAndResult>, baseline: &[DefinedItem])
+                 -> (ExpAndResult, Vec<ExpAndResult>) {
+
+    let idx = res.iter().position(|e| e.0.configs == baseline);
+    let idx = idx.expect("no baseline in results?");
+
+    let baseline = res.remove(idx);
+
+    (baseline, res)
+}*/
+
+fn log_report(report: &Report) -> Result<()> {
+    println!("results:");
+    for r in &report.results_by_total_time {
+        // FIXME: Duration's Debug ignores the width format specifier
+        println!("{:7.2?} ({:7.2?} build / {:7.2?} run)- {}",
+                 r.1.build_time + r.1.run_time,
+                 r.1.build_time, r.1.run_time,
+                 r.0.display());
+    }
+
+    Ok(())
 }
 
 fn render_html(report: &Report) -> Result<()> {
-    panic!()
+    Ok(())
 }
 
