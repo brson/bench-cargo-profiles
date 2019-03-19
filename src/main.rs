@@ -226,7 +226,7 @@ fn save_state(path: &Path, state: &State) -> Result<()> {
     let s = serde_json::to_string_pretty(state)?;
 
     let ext = path.extension().expect("state path has no extension");
-    let tmp_ext = format!("{:?}.{}", ext.display(), "tmp");
+    let tmp_ext = format!("{}.{}", ext.to_string_lossy(), "tmp");
     let tmp_path = path.with_extension(&tmp_ext);
 
     println!("tmp_path: {}", tmp_path.display());
