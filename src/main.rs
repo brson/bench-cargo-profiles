@@ -129,7 +129,7 @@ struct StaticConfigItem {
 }
 
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug)]
 struct ConfigItem {
     path: String,
     env_var: String,
@@ -162,7 +162,7 @@ struct Plan {
     cases: Vec<Experiment>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 struct Experiment {
     configs: Vec<DefinedItem>,
 }
@@ -170,7 +170,7 @@ struct Experiment {
 impl Experiment {
     fn display(&self) -> String {
         if self.configs.is_empty() {
-            return "(empty)".to_string();
+            return "(baseline)".to_string();
         }
         
         let mut buf = String::new();
@@ -241,17 +241,33 @@ fn make_plan() -> Plan {
     let mut cases = vec![];
     let mut baseline = vec![];
 
+    // Gather the set of cfgs that makeup the baseline profile
     for c in CONFIG_ITEMS {
+        let baseline_cfg = (c.into(), c.default.into());
+        baseline.push(baseline_cfg.clone());
+    }
 
-        baseline.push((c.into(), c.default.into()));
+    // Test the baseline case. An empty config vec here means that this
+    // experiment is run without adding any cfgs to the baseline profile.
+    cases.push(Experiment {
+        configs: vec![],
+    });
 
-        let ignore_case = c.values.is_empty();
-        if ignore_case { continue }
-
+    for c in CONFIG_ITEMS {
         for vals in c.values {
-            cases.push(Experiment {
+            let ex = Experiment {
                 configs: vec![(c.into(), (*vals).into())],
-            });
+            };
+
+            let all_cfgs_in_baseline =
+                ex.configs.iter().all(|i| baseline.contains(i));
+
+            if all_cfgs_in_baseline {
+                println!("skipped redundant baseline case {}", ex.display());
+                continue;
+            }
+
+            cases.push(ex);
         }
     }
 
@@ -268,8 +284,7 @@ fn parse_state(s: &str) -> Result<State> {
 fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
 
     for (idx, case) in state.plan.cases.iter().enumerate() {
-        assert!(case.configs.len() == 1);
-        println!("case {}: {}={}", idx, case.configs[0].0.path, case.configs[0].1);
+        println!("case {}: {}", idx, case.display());
     }
 
     std::process::exit(0);
