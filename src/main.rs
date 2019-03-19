@@ -33,6 +33,9 @@ struct Options {
     /// The path to the Cargo.toml file to explore
     #[structopt(long = "manifest-path", default_value = "Cargo.toml")]
     manifest_path: PathBuf,
+    /// The path to the target directory
+    #[structopt(long = "target-dir", default_value = "./target/")]
+    target_dir: PathBuf,
     /// The directory in which we store the experiment data and HTML report
     #[structopt(long = "data-dir", default_value = "./", parse(from_os_str))]
     data_dir: PathBuf,
@@ -339,6 +342,7 @@ fn cargo_command(opts: &Options,
                  args: &[&str],
                  envs: Vec<(String, String)>) -> Command {
 
+    // FIXME: Show the common args and envs as well
     println!("running cargo with args {:?}", args);
     println!("running cargo with envs {:?}", envs);
 
@@ -346,9 +350,12 @@ fn cargo_command(opts: &Options,
     // FIXME: why do I need a Vec here instead of like common_args?
     let common_envs = vec![("RUSTC_BOOTSTRAP", "1")];
     let manifest_arg = &format!("--manifest-path={}", opts.manifest_path.display());
+    let target_dir_arg = &format!("--target-dir={}", opts.target_dir.display());
 
     let mut cmd = Command::new("cargo");
     cmd.arg(subcmd);
+    cmd.arg(manifest_arg);
+    cmd.arg(target_dir_arg);
     cmd.args(common_args);
     cmd.args(args);
     cmd.envs(common_envs);
