@@ -16,12 +16,12 @@ extern crate structopt;
 extern crate serde_derive;
 
 use failure::{ResultExt, Error};
-use std::path::{PathBuf, Path};
-use std::result::Result as StdResult;
-use std::time::Duration;
 use std::fs;
 use std::io;
+use std::path::{PathBuf, Path};
 use std::process::Command;
+use std::result::Result as StdResult;
+use std::time::Duration;
 use structopt::StructOpt;
 
 // A shorthand for all the `Result` types returned in this crate
@@ -290,7 +290,7 @@ fn run_experiment(baseline: &[DefinedItem], case: &Experiment) -> Result<ExpResu
     let items = merge_items(baseline, &case.configs);
     let envs = items_to_envs(&items);
 
-    let cmd_res = run_cargo(envs.clone(), &["clean"]);
+    let clean_cmd_res = run_cargo(envs.clone(), &["clean"])?;
 
     panic!()
 }
@@ -298,17 +298,30 @@ fn run_experiment(baseline: &[DefinedItem], case: &Experiment) -> Result<ExpResu
 fn run_cargo<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Result<()> {
     let clean_cmd = cargo_command(envs.clone(), &["clean"]);
 
-    run_command(clean_cmd)
+    let cmd_result = run_command(clean_cmd)
+        .context("error running cargo")?;
+
+    if let Err(e) = cmd_result {
+        let msg = "cargo command failed";
+        println!("msg");
+        Err(e).context(msg)?;
+    }
+
+    Ok(())
 }
 
 fn cargo_command<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Command {
+
+    println!("running cargo with args {:?}", args);
+    println!("running cargo with envs {:?}", envs);
+
     let mut cmd = Command::new("cargo");
     cmd.envs(envs);
     cmd.args(args);
     cmd
 }
 
-fn run_command(cmd: Command) -> Result<()> {
+fn run_command(cmd: Command) -> Result<Result<()>> {
     panic!()
 }
 
