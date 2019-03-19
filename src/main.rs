@@ -338,7 +338,7 @@ fn merge_items(baseline: &[DefinedItem], items: &[DefinedItem]) -> Vec<DefinedIt
 }
 
 fn items_to_envs(items: &[DefinedItem]) -> Vec<(String, String)> {
-    items.iter().map(|i| -> (String, String) {
+    items.iter().map(|i| {
         (i.0.env_var.clone(), i.1.clone())
     }).collect()
 }
