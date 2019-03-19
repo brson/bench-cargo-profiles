@@ -316,9 +316,17 @@ fn run_experiment(opts: &Options,
     let items = merge_items(baseline, &case.configs);
     let envs = items_to_envs(&items);
 
-    let clean_cmd_res = run_cargo(opts, "clean", &[], envs.clone())?;
+    run_cargo(opts, "clean", &[], envs.clone())?;
 
-    panic!()
+    let build_time = time(&|| {
+        run_cargo(opts, "bench", &["--no-run"], envs.clone())
+    })?;
+
+    let run_time = time(&|| {
+        run_cargo(opts, "bench", &[], envs.clone())
+    })?;
+
+    Ok(ExpResult { build_time, run_time })
 }
 
 fn run_cargo<'a>(opts: &Options, subcmd: &str, args: &[&str],
@@ -402,6 +410,10 @@ fn items_to_envs(items: &[DefinedItem]) -> Vec<(String, String)> {
     items.iter().map(|i| {
         (i.0.env_var.clone(), i.1.clone())
     }).collect()
+}
+
+fn time(f: &Fn() -> Result<()>) -> Result<Duration> {
+    panic!()
 }
 
 fn gen_report(opts: &Options, state: &State) -> Result<Report> {
