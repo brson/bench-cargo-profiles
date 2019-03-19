@@ -287,8 +287,6 @@ fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
         println!("case {}: {}", idx, case.display());
     }
 
-    std::process::exit(0);
-
     let baseline = &state.plan.baseline;
     for (idx, case) in state.plan.cases.iter().enumerate() {
 
