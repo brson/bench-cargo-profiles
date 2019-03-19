@@ -129,13 +129,15 @@ struct StaticConfigItem {
 }
 
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
 struct ConfigItem {
     path: String,
     env_var: String,
     values: Vec<String>,
     default: String,
 }
+
+type DefinedItem = (ConfigItem, String);
 
 impl<'a> From<&'a StaticConfigItem> for ConfigItem {
     fn from(other: &'a StaticConfigItem) -> ConfigItem {
@@ -147,8 +149,6 @@ impl<'a> From<&'a StaticConfigItem> for ConfigItem {
         }
     }
 }
-
-type DefinedItem = (ConfigItem, String);
 
 #[derive(Serialize, Deserialize)]
 struct State {
@@ -312,12 +312,35 @@ fn run_command(cmd: Command) -> Result<()> {
     panic!()
 }
 
-fn merge_items(i1: &[DefinedItem], i2: &[DefinedItem]) -> Vec<DefinedItem> {
-    panic!()
+fn merge_items(baseline: &[DefinedItem], items: &[DefinedItem]) -> Vec<DefinedItem> {
+
+    // Create the baseline, which should be a full set of config options
+    let mut new = baseline.to_vec();
+
+    // Merge the test case items into the baseline
+    for ref item in items {
+        let mut found = false;
+
+        // Look for the config item in the baseline
+        for base in new.iter_mut() {
+            if base.0 == base.0 {
+                base.1 = item.1.clone();
+
+                found = true;
+                break;
+            }
+        }
+
+        assert!(found);
+    }
+
+    new
 }
 
 fn items_to_envs(items: &[DefinedItem]) -> Vec<(String, String)> {
-    panic!()
+    items.iter().map(|i| -> (String, String) {
+        (i.0.env_var.clone(), i.1.clone())
+    }).collect()
 }
 
 fn gen_report(opts: &Options, state: &State) -> Result<Report> {
