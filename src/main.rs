@@ -21,7 +21,7 @@ use std::io;
 use std::path::{PathBuf, Path};
 use std::process::Command;
 use std::result::Result as StdResult;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 // A shorthand for all the `Result` types returned in this crate
@@ -413,7 +413,11 @@ fn items_to_envs(items: &[DefinedItem]) -> Vec<(String, String)> {
 }
 
 fn time(f: &Fn() -> Result<()>) -> Result<Duration> {
-    panic!()
+    let start = Instant::now();
+    f()?;
+    let end = Instant::now();
+
+    Ok(end.duration_since(start))
 }
 
 fn gen_report(opts: &Options, state: &State) -> Result<Report> {
