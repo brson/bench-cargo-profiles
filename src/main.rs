@@ -15,7 +15,7 @@ extern crate structopt;
 #[macro_use]
 extern crate serde_derive;
 
-use failure::{ResultExt, Error};
+use failure::{ResultExt, Error, err_msg};
 use std::fs;
 use std::io;
 use std::path::{PathBuf, Path};
@@ -267,6 +267,13 @@ fn parse_state(s: &str) -> Result<State> {
 
 fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
 
+    for (idx, case) in state.plan.cases.iter().enumerate() {
+        assert!(case.configs.len() == 1);
+        println!("case {}: {}={}", idx, case.configs[0].0.path, case.configs[0].1);
+    }
+
+    std::process::exit(0);
+
     let baseline = &state.plan.baseline;
     for (idx, case) in state.plan.cases.iter().enumerate() {
 
@@ -321,8 +328,14 @@ fn cargo_command<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Command {
     cmd
 }
 
-fn run_command(cmd: Command) -> Result<Result<()>> {
-    panic!()
+fn run_command(mut cmd: Command) -> Result<Result<()>> {
+    let status = cmd.status()?;
+
+    Ok(if status.success() {
+        Ok(())
+    } else {
+        Err(err_msg("command failed"))
+    })
 }
 
 fn merge_items(baseline: &[DefinedItem], items: &[DefinedItem]) -> Vec<DefinedItem> {
