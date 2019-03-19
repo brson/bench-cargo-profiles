@@ -296,7 +296,7 @@ fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
 
         if !previously_run {
             println!("running experiment {}: {}", idx, case.display());
-            state.results.push(run_experiment(baseline, case)?);
+            state.results.push(run_experiment(opts, baseline, case)?);
             save_state(&opts.state_path(), state);
         } else {
             println!("skipping previously-run experiment {}, {}", idx, case.display());
@@ -306,17 +306,21 @@ fn run_experiments(opts: &Options, state: &mut State) -> Result<()> {
     Ok(())
 }
 
-fn run_experiment(baseline: &[DefinedItem], case: &Experiment) -> Result<ExpResult> {
+fn run_experiment(opts: &Options,
+                  baseline: &[DefinedItem],
+                  case: &Experiment) -> Result<ExpResult> {
+
     let items = merge_items(baseline, &case.configs);
     let envs = items_to_envs(&items);
 
-    let clean_cmd_res = run_cargo(envs.clone(), &["clean"])?;
+    let clean_cmd_res = run_cargo(opts, "clean", &[], envs.clone())?;
 
     panic!()
 }
 
-fn run_cargo<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Result<()> {
-    let clean_cmd = cargo_command(envs.clone(), &["clean"]);
+fn run_cargo<'a>(opts: &Options, subcmd: &str, args: &[&str],
+                 envs: Vec<(String, String)>) -> Result<()> {
+    let clean_cmd = cargo_command(opts, subcmd, args, envs.clone());
 
     let cmd_result = run_command(clean_cmd)
         .context("error running cargo")?;
@@ -330,14 +334,25 @@ fn run_cargo<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Result<()> {
     Ok(())
 }
 
-fn cargo_command<'a>(envs: Vec<(String, String)>, args: &[&str]) -> Command {
+fn cargo_command(opts: &Options,
+                 subcmd: &str,
+                 args: &[&str],
+                 envs: Vec<(String, String)>) -> Command {
 
     println!("running cargo with args {:?}", args);
     println!("running cargo with envs {:?}", envs);
 
+    let common_args = &["-vv", "-Zunstable-options", "-Zconfig-profile"];
+    // FIXME: why do I need a Vec here instead of like common_args?
+    let common_envs = vec![("RUSTC_BOOTSTRAP", "1")];
+    let manifest_arg = &format!("--manifest-path={}", opts.manifest_path.display());
+
     let mut cmd = Command::new("cargo");
-    cmd.envs(envs);
+    cmd.arg(subcmd);
+    cmd.args(common_args);
     cmd.args(args);
+    cmd.envs(common_envs);
+    cmd.envs(envs);
     cmd
 }
 
