@@ -6,7 +6,7 @@
 //! - better name than 'state'
 //! - better name than 'item' (cfg?)
 //! - better error reporting
-//! - logging
+//! - use logging instead of println
 
 #![allow(warnings)] // TODO tmp
 
