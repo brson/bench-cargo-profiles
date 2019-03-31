@@ -177,6 +177,7 @@ struct ExpResult {
 type ExpAndResult = (Experiment, ExpResult);
 
 struct Report {
+    baseline: Vec<DefinedItem>,
     results_by_total_time: Vec<ExpAndResult>,
     results_by_build_time: Vec<ExpAndResult>,
     results_by_run_time: Vec<ExpAndResult>,
@@ -449,6 +450,7 @@ fn gen_report(opts: &Options, state: &State) -> Result<Report> {
     results_run.sort_by_key(|x| x.1.run_time);
 
     Ok(Report {
+        baseline: state.plan.baseline.clone(),
         results_by_total_time: results_total,
         results_by_build_time: results_build,
         results_by_run_time: results_run,
@@ -456,6 +458,11 @@ fn gen_report(opts: &Options, state: &State) -> Result<Report> {
 }
 
 fn log_report(report: &Report) -> Result<()> {
+    println!("baseline:");
+    for b in &report.baseline {
+        println!("{} = {}", b.0.path, b.1);
+    }
+
     println!("results (by total time):");
     for r in &report.results_by_total_time {
         // FIXME: Duration's Debug ignores the width format specifier
