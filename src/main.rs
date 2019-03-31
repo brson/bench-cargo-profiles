@@ -178,6 +178,8 @@ type ExpAndResult = (Experiment, ExpResult);
 
 struct Report {
     results_by_total_time: Vec<ExpAndResult>,
+    results_by_build_time: Vec<ExpAndResult>,
+    results_by_run_time: Vec<ExpAndResult>,
 }
 
 impl State {
@@ -433,34 +435,45 @@ fn gen_report(opts: &Options, state: &State) -> Result<Report> {
 
     assert!(state.results.len() == state.plan.cases.len());
 
-    let mut results =
+    let results =
         state.plan.cases.iter().cloned()
         .zip(state.results.iter().cloned())
         .collect::<Vec<_>>();
 
-    //let (baseline, results) = split_results(results, &state.plan.baseline);
+    let mut results_total = results.clone();
+    let mut results_build = results.clone();
+    let mut results_run = results.clone();
 
-    results.sort_by_key(|x| x.1.build_time + x.1.run_time);
+    results_total.sort_by_key(|x| x.1.build_time + x.1.run_time);
+    results_build.sort_by_key(|x| x.1.build_time);
+    results_run.sort_by_key(|x| x.1.run_time);
 
     Ok(Report {
-        results_by_total_time: results
+        results_by_total_time: results_total,
+        results_by_build_time: results_build,
+        results_by_run_time: results_run,
     })
 }
 
-/*fn split_results(mut res: Vec<ExpAndResult>, baseline: &[DefinedItem])
-                 -> (ExpAndResult, Vec<ExpAndResult>) {
-
-    let idx = res.iter().position(|e| e.0.configs == baseline);
-    let idx = idx.expect("no baseline in results?");
-
-    let baseline = res.remove(idx);
-
-    (baseline, res)
-}*/
-
 fn log_report(report: &Report) -> Result<()> {
-    println!("results:");
+    println!("results (by total time):");
     for r in &report.results_by_total_time {
+        // FIXME: Duration's Debug ignores the width format specifier
+        println!("{:7.2?} ({:7.2?} build / {:7.2?} run)- {}",
+                 r.1.build_time + r.1.run_time,
+                 r.1.build_time, r.1.run_time,
+                 r.0.display());
+    }
+    println!("results (by build time):");
+    for r in &report.results_by_build_time {
+        // FIXME: Duration's Debug ignores the width format specifier
+        println!("{:7.2?} ({:7.2?} build / {:7.2?} run)- {}",
+                 r.1.build_time + r.1.run_time,
+                 r.1.build_time, r.1.run_time,
+                 r.0.display());
+    }
+    println!("results (by run time):");
+    for r in &report.results_by_run_time {
         // FIXME: Duration's Debug ignores the width format specifier
         println!("{:7.2?} ({:7.2?} build / {:7.2?} run)- {}",
                  r.1.build_time + r.1.run_time,
